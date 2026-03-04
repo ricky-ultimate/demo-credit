@@ -4,6 +4,7 @@ import { sendError } from "../utils/response.utils";
 
 export interface AuthenticatedRequest extends Request {
   user?: TokenPayload;
+  body: any;
 }
 
 export const authenticate = (
