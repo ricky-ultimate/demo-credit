@@ -22,6 +22,6 @@ export const sendError = (
   return res.status(statusCode).json({
     status: "error",
     message,
-    ...(errors && { errors }),
+    ...(errors !== undefined ? { errors } : {}),
   });
 };
