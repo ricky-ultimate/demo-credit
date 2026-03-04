@@ -13,6 +13,12 @@ export const isBlacklisted = async (identity: string): Promise<boolean> => {
       }
     );
 
+    const isMockResponse = "mock-response" in response.data;
+    if (isMockResponse) {
+      logger("warn", "Adjutor is in test mode. Karma check bypassed for:", identity);
+      return false;
+    }
+
     return (
       response.data?.status === "success" &&
       response.data?.data?.karma_identity !== undefined
