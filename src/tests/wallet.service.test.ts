@@ -9,25 +9,26 @@ import { AppError } from "../middlewares/error.middleware";
 import db from "../config/db.config";
 
 jest.mock("../config/db.config", () => {
-  const mockTrx = {
-    where: jest.fn().mockReturnThis(),
-    increment: jest.fn().mockResolvedValue(1),
-    decrement: jest.fn().mockResolvedValue(1),
-    insert: jest.fn().mockResolvedValue([1]),
-  };
-
-  const mockQueryBuilder = {
+  const qb = {
     where: jest.fn().mockReturnThis(),
     orWhere: jest.fn().mockReturnThis(),
     orderBy: jest.fn().mockReturnThis(),
     first: jest.fn(),
+    insert: jest.fn().mockResolvedValue([1]),
     increment: jest.fn().mockResolvedValue(1),
     decrement: jest.fn().mockResolvedValue(1),
-    insert: jest.fn().mockResolvedValue([1]),
   };
 
-  const mockDb: any = jest.fn(() => mockQueryBuilder);
-  mockDb.transaction = jest.fn((cb: Function) => cb(mockTrx));
+  const trx: any = jest.fn(() => qb);
+  trx.where = qb.where;
+  trx.first = qb.first;
+  trx.insert = qb.insert;
+  trx.increment = qb.increment;
+  trx.decrement = qb.decrement;
+
+  const mockDb: any = jest.fn(() => qb);
+  mockDb.transaction = jest.fn((cb: Function) => cb(trx));
+  mockDb._qb = qb;
 
   return { __esModule: true, default: mockDb };
 });
@@ -37,7 +38,7 @@ jest.mock("../utils/transaction.utils", () => ({
   generateReference: jest.fn(() => "DC-mock-reference"),
 }));
 
-const mockDb = db as jest.MockedFunction<any>;
+const mockDb = db as any;
 
 const mockWallet = {
   id: "wallet-uuid",
@@ -64,11 +65,14 @@ const mockReceiverUser = {
 describe("Wallet Service", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockDb._qb.where.mockReturnThis();
+    mockDb._qb.orWhere.mockReturnThis();
+    mockDb._qb.orderBy.mockReturnThis();
   });
 
   describe("getWalletByUserId", () => {
     it("should return a wallet for a valid user", async () => {
-      mockDb().where().first.mockResolvedValue(mockWallet);
+      mockDb._qb.first.mockResolvedValue(mockWallet);
 
       const wallet = await getWalletByUserId("user-uuid");
 
@@ -76,7 +80,7 @@ describe("Wallet Service", () => {
     });
 
     it("should throw 404 if wallet does not exist", async () => {
-      mockDb().where().first.mockResolvedValue(null);
+      mockDb._qb.first.mockResolvedValue(null);
 
       await expect(getWalletByUserId("user-uuid")).rejects.toThrow(
         new AppError("Wallet not found.", 404)
@@ -87,7 +91,7 @@ describe("Wallet Service", () => {
   describe("fundWallet", () => {
     it("should fund wallet and return updated wallet", async () => {
       const updatedWallet = { ...mockWallet, balance: 6000 };
-      mockDb().where().first
+      mockDb._qb.first
         .mockResolvedValueOnce(mockWallet)
         .mockResolvedValueOnce(updatedWallet);
 
@@ -97,7 +101,7 @@ describe("Wallet Service", () => {
     });
 
     it("should throw 404 if wallet not found during fund", async () => {
-      mockDb().where().first.mockResolvedValue(null);
+      mockDb._qb.first.mockResolvedValue(null);
 
       await expect(fundWallet("user-uuid", 1000)).rejects.toThrow(
         new AppError("Wallet not found.", 404)
@@ -108,20 +112,23 @@ describe("Wallet Service", () => {
   describe("transferFunds", () => {
     it("should transfer funds and return updated sender wallet", async () => {
       const updatedSenderWallet = { ...mockWallet, balance: 4000 };
-
-      mockDb().where().first
+      mockDb._qb.first
         .mockResolvedValueOnce(mockWallet)
         .mockResolvedValueOnce(mockReceiverUser)
         .mockResolvedValueOnce(mockReceiverWallet)
         .mockResolvedValueOnce(updatedSenderWallet);
 
-      const result = await transferFunds("user-uuid", "jane@example.com", 1000);
+      const result = await transferFunds(
+        "user-uuid",
+        "jane@example.com",
+        1000
+      );
 
       expect(result.balance).toBe(4000);
     });
 
     it("should throw 400 if sender has insufficient balance", async () => {
-      mockDb().where().first.mockResolvedValue({ ...mockWallet, balance: 100 });
+      mockDb._qb.first.mockResolvedValue({ ...mockWallet, balance: 100 });
 
       await expect(
         transferFunds("user-uuid", "jane@example.com", 1000)
@@ -129,7 +136,7 @@ describe("Wallet Service", () => {
     });
 
     it("should throw 404 if receiver does not exist", async () => {
-      mockDb().where().first
+      mockDb._qb.first
         .mockResolvedValueOnce(mockWallet)
         .mockResolvedValueOnce(null);
 
@@ -139,7 +146,7 @@ describe("Wallet Service", () => {
     });
 
     it("should throw 400 if sender tries to transfer to themselves", async () => {
-      mockDb().where().first
+      mockDb._qb.first
         .mockResolvedValueOnce(mockWallet)
         .mockResolvedValueOnce({ ...mockReceiverUser, id: "user-uuid" });
 
@@ -151,7 +158,7 @@ describe("Wallet Service", () => {
     });
 
     it("should throw 404 if receiver wallet does not exist", async () => {
-      mockDb().where().first
+      mockDb._qb.first
         .mockResolvedValueOnce(mockWallet)
         .mockResolvedValueOnce(mockReceiverUser)
         .mockResolvedValueOnce(null);
@@ -165,7 +172,7 @@ describe("Wallet Service", () => {
   describe("withdrawFunds", () => {
     it("should withdraw funds and return updated wallet", async () => {
       const updatedWallet = { ...mockWallet, balance: 4500 };
-      mockDb().where().first
+      mockDb._qb.first
         .mockResolvedValueOnce(mockWallet)
         .mockResolvedValueOnce(updatedWallet);
 
@@ -175,7 +182,7 @@ describe("Wallet Service", () => {
     });
 
     it("should throw 400 if balance is insufficient", async () => {
-      mockDb().where().first.mockResolvedValue({ ...mockWallet, balance: 100 });
+      mockDb._qb.first.mockResolvedValue({ ...mockWallet, balance: 100 });
 
       await expect(withdrawFunds("user-uuid", 500)).rejects.toThrow(
         new AppError("Insufficient balance.", 400)
@@ -183,7 +190,7 @@ describe("Wallet Service", () => {
     });
 
     it("should throw 404 if wallet not found during withdrawal", async () => {
-      mockDb().where().first.mockResolvedValue(null);
+      mockDb._qb.first.mockResolvedValue(null);
 
       await expect(withdrawFunds("user-uuid", 500)).rejects.toThrow(
         new AppError("Wallet not found.", 404)
@@ -206,8 +213,8 @@ describe("Wallet Service", () => {
         },
       ];
 
-      mockDb().where().first.mockResolvedValue(mockWallet);
-      mockDb().where().orWhere().orderBy.mockResolvedValue(mockTransactions);
+      mockDb._qb.first.mockResolvedValue(mockWallet);
+      mockDb._qb.orderBy.mockResolvedValue(mockTransactions);
 
       const result = await getTransactionHistory("user-uuid");
 
@@ -216,7 +223,7 @@ describe("Wallet Service", () => {
     });
 
     it("should throw 404 if wallet not found when fetching history", async () => {
-      mockDb().where().first.mockResolvedValue(null);
+      mockDb._qb.first.mockResolvedValue(null);
 
       await expect(getTransactionHistory("user-uuid")).rejects.toThrow(
         new AppError("Wallet not found.", 404)
