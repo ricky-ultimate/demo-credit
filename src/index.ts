@@ -8,6 +8,7 @@ import logger from "./utils/logger.utils";
 import db from "./config/db.config";
 import { errorMiddleware } from "./middlewares/error.middleware";
 import authRoutes from "./core/auth/auth.routes";
+import walletRoutes from "./core/wallet/wallet.routes";
 
 dotenv.config();
 
@@ -24,6 +25,7 @@ app.get("/health", (_req, res) => {
 });
 
 app.use("/api/auth", authRoutes);
+app.use("/api/wallet", walletRoutes);
 
 app.use(errorMiddleware);
 
