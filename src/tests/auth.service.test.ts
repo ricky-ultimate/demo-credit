@@ -30,10 +30,16 @@ jest.mock("bcryptjs");
 jest.mock("uuid", () => ({ v4: jest.fn(() => "mock-uuid") }));
 
 const mockDb = db as any;
-const mockIsBlacklisted = adjutorUtils.isBlacklisted as jest.MockedFunction<typeof adjutorUtils.isBlacklisted>;
-const mockSignToken = jwtUtils.signToken as jest.MockedFunction<typeof jwtUtils.signToken>;
+const mockIsBlacklisted = adjutorUtils.isBlacklisted as jest.MockedFunction<
+  typeof adjutorUtils.isBlacklisted
+>;
+const mockSignToken = jwtUtils.signToken as jest.MockedFunction<
+  typeof jwtUtils.signToken
+>;
 const mockBcryptHash = bcrypt.hash as jest.MockedFunction<typeof bcrypt.hash>;
-const mockBcryptCompare = bcrypt.compare as jest.MockedFunction<typeof bcrypt.compare>;
+const mockBcryptCompare = bcrypt.compare as jest.MockedFunction<
+  typeof bcrypt.compare
+>;
 
 const mockUser = {
   id: "mock-uuid",
@@ -99,12 +105,12 @@ describe("Auth Service", () => {
             name: "Bad Actor",
             email: "bad@example.com",
             password: "securepassword",
-          })
+          }),
         ).rejects.toThrow(
           new AppError(
             "This account cannot be created due to a policy restriction.",
-            403
-          )
+            403,
+          ),
         );
       });
 
@@ -117,17 +123,15 @@ describe("Auth Service", () => {
             name: "John Doe",
             email: "john@example.com",
             password: "securepassword",
-          })
+          }),
         ).rejects.toThrow(
-          new AppError("An account with this email already exists.", 409)
+          new AppError("An account with this email already exists.", 409),
         );
       });
 
       it("should throw if Adjutor API fails", async () => {
         mockIsBlacklisted.mockRejectedValue(
-          new Error(
-            "Unable to verify user identity. Please try again later."
-          )
+          new Error("Unable to verify user identity. Please try again later."),
         );
 
         await expect(
@@ -135,9 +139,9 @@ describe("Auth Service", () => {
             name: "John Doe",
             email: "john@example.com",
             password: "securepassword",
-          })
+          }),
         ).rejects.toThrow(
-          "Unable to verify user identity. Please try again later."
+          "Unable to verify user identity. Please try again later.",
         );
       });
     });
@@ -162,8 +166,21 @@ describe("Auth Service", () => {
         mockDb._qb.first.mockResolvedValue(null);
 
         await expect(
-          loginUser("nobody@example.com", "securepassword")
+          loginUser("nobody@example.com", "securepassword"),
         ).rejects.toThrow(new AppError("Invalid email or password.", 401));
+      });
+
+      it("should throw 403 if user account is blacklisted", async () => {
+        mockDb._qb.first.mockResolvedValue({
+          ...mockUser,
+          is_blacklisted: true,
+        });
+
+        await expect(
+          loginUser("john@example.com", "securepassword"),
+        ).rejects.toThrow(
+          new AppError("This account has been suspended.", 403),
+        );
       });
 
       it("should throw 401 if password does not match", async () => {
@@ -171,7 +188,7 @@ describe("Auth Service", () => {
         (mockBcryptCompare as jest.Mock).mockResolvedValue(false);
 
         await expect(
-          loginUser("john@example.com", "wrongpassword")
+          loginUser("john@example.com", "wrongpassword"),
         ).rejects.toThrow(new AppError("Invalid email or password.", 401));
       });
     });

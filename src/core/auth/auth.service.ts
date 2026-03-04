@@ -81,6 +81,10 @@ export const loginUser = async (
     throw new AppError("Invalid email or password.", 401);
   }
 
+  if (user.is_blacklisted) {
+    throw new AppError("This account has been suspended.", 403);
+  }
+
   const isMatch = await bcrypt.compare(password, user.password_hash);
   if (!isMatch) {
     throw new AppError("Invalid email or password.", 401);
