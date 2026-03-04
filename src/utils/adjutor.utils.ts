@@ -2,10 +2,10 @@ import axios from "axios";
 import { ENV } from "../constants/env";
 import logger from "./logger.utils";
 
-export const isBlacklisted = async (email: string): Promise<boolean> => {
+export const isBlacklisted = async (identity: string): Promise<boolean> => {
   try {
     const response = await axios.get(
-      `${ENV.ADJUTOR_BASE_URL}/v2/verification/karma/${email}`,
+      `${ENV.ADJUTOR_BASE_URL}/v2/verification/karma/${identity}`,
       {
         headers: {
           Authorization: `Bearer ${ENV.ADJUTOR_API_KEY}`,
@@ -13,7 +13,10 @@ export const isBlacklisted = async (email: string): Promise<boolean> => {
       }
     );
 
-    return response.data?.data !== null;
+    return (
+      response.data?.status === "success" &&
+      response.data?.data?.karma_identity !== undefined
+    );
   } catch (error: unknown) {
     if (axios.isAxiosError(error) && error.response?.status === 404) {
       return false;
