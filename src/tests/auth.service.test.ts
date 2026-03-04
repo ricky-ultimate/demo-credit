@@ -6,18 +6,20 @@ import * as jwtUtils from "../utils/jwt.utils";
 import bcrypt from "bcryptjs";
 
 jest.mock("../config/db.config", () => {
-  const mockTrx = {
-    insert: jest.fn().mockResolvedValue([1]),
-  };
-
-  const mockQueryBuilder = {
+  const qb = {
     where: jest.fn().mockReturnThis(),
     first: jest.fn(),
     insert: jest.fn().mockResolvedValue([1]),
   };
 
-  const mockDb: any = jest.fn(() => mockQueryBuilder);
-  mockDb.transaction = jest.fn((cb: Function) => cb(mockTrx));
+  const trx: any = jest.fn(() => qb);
+  trx.where = qb.where;
+  trx.first = qb.first;
+  trx.insert = qb.insert;
+
+  const mockDb: any = jest.fn(() => qb);
+  mockDb.transaction = jest.fn((cb: Function) => cb(trx));
+  mockDb._qb = qb;
 
   return { __esModule: true, default: mockDb };
 });
@@ -27,7 +29,7 @@ jest.mock("../utils/jwt.utils");
 jest.mock("bcryptjs");
 jest.mock("uuid", () => ({ v4: jest.fn(() => "mock-uuid") }));
 
-const mockDb = db as jest.MockedFunction<any>;
+const mockDb = db as any;
 const mockIsBlacklisted = adjutorUtils.isBlacklisted as jest.MockedFunction<typeof adjutorUtils.isBlacklisted>;
 const mockSignToken = jwtUtils.signToken as jest.MockedFunction<typeof jwtUtils.signToken>;
 const mockBcryptHash = bcrypt.hash as jest.MockedFunction<typeof bcrypt.hash>;
@@ -46,6 +48,7 @@ const mockUser = {
 describe("Auth Service", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockDb._qb.where.mockReturnThis();
     mockSignToken.mockReturnValue("mock-token");
   });
 
@@ -53,7 +56,7 @@ describe("Auth Service", () => {
     describe("positive scenarios", () => {
       it("should register a new user and return a token", async () => {
         mockIsBlacklisted.mockResolvedValue(false);
-        mockDb().where().first
+        mockDb._qb.first
           .mockResolvedValueOnce(null)
           .mockResolvedValueOnce(mockUser);
         (mockBcryptHash as jest.Mock).mockResolvedValue("hashed_password");
@@ -72,7 +75,7 @@ describe("Auth Service", () => {
 
       it("should hash the password before storing", async () => {
         mockIsBlacklisted.mockResolvedValue(false);
-        mockDb().where().first
+        mockDb._qb.first
           .mockResolvedValueOnce(null)
           .mockResolvedValueOnce(mockUser);
         (mockBcryptHash as jest.Mock).mockResolvedValue("hashed_password");
@@ -98,13 +101,16 @@ describe("Auth Service", () => {
             password: "securepassword",
           })
         ).rejects.toThrow(
-          new AppError("This account cannot be created due to a policy restriction.", 403)
+          new AppError(
+            "This account cannot be created due to a policy restriction.",
+            403
+          )
         );
       });
 
       it("should throw 409 if email already exists", async () => {
         mockIsBlacklisted.mockResolvedValue(false);
-        mockDb().where().first.mockResolvedValueOnce(mockUser);
+        mockDb._qb.first.mockResolvedValueOnce(mockUser);
 
         await expect(
           registerUser({
@@ -119,7 +125,9 @@ describe("Auth Service", () => {
 
       it("should throw if Adjutor API fails", async () => {
         mockIsBlacklisted.mockRejectedValue(
-          new Error("Unable to verify user identity. Please try again later.")
+          new Error(
+            "Unable to verify user identity. Please try again later."
+          )
         );
 
         await expect(
@@ -128,7 +136,9 @@ describe("Auth Service", () => {
             email: "john@example.com",
             password: "securepassword",
           })
-        ).rejects.toThrow("Unable to verify user identity. Please try again later.");
+        ).rejects.toThrow(
+          "Unable to verify user identity. Please try again later."
+        );
       });
     });
   });
@@ -136,7 +146,7 @@ describe("Auth Service", () => {
   describe("loginUser", () => {
     describe("positive scenarios", () => {
       it("should return a token on valid credentials", async () => {
-        mockDb().where().first.mockResolvedValue(mockUser);
+        mockDb._qb.first.mockResolvedValue(mockUser);
         (mockBcryptCompare as jest.Mock).mockResolvedValue(true);
 
         const result = await loginUser("john@example.com", "securepassword");
@@ -149,7 +159,7 @@ describe("Auth Service", () => {
 
     describe("negative scenarios", () => {
       it("should throw 401 if user does not exist", async () => {
-        mockDb().where().first.mockResolvedValue(null);
+        mockDb._qb.first.mockResolvedValue(null);
 
         await expect(
           loginUser("nobody@example.com", "securepassword")
@@ -157,7 +167,7 @@ describe("Auth Service", () => {
       });
 
       it("should throw 401 if password does not match", async () => {
-        mockDb().where().first.mockResolvedValue(mockUser);
+        mockDb._qb.first.mockResolvedValue(mockUser);
         (mockBcryptCompare as jest.Mock).mockResolvedValue(false);
 
         await expect(
