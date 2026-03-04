@@ -6,6 +6,8 @@ import dotenv from "dotenv";
 import { ENV } from "./constants/env";
 import logger from "./utils/logger.utils";
 import db from "./config/db.config";
+import { errorMiddleware } from "./middlewares/error.middleware";
+import authRoutes from "./core/auth/auth.routes";
 
 dotenv.config();
 
@@ -20,6 +22,10 @@ app.use(morgan("dev"));
 app.get("/health", (_req, res) => {
   res.status(200).json({ status: "ok" });
 });
+
+app.use("/api/auth", authRoutes);
+
+app.use(errorMiddleware);
 
 db.raw("SELECT 1")
   .then(() => {
